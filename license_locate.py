@@ -6,6 +6,8 @@ import cv2
 import numpy as np
 
 #  确定最小搜索窗口为180*30，后续进行细定位
+from PIL import Image
+
 window_h = 20
 window_w = 180
 
@@ -16,7 +18,6 @@ class Locate:
         # 加权平均法 + cv2 进行灰度化
         image = cv2.imread(file_name)
         gray_image = self.get_gray_image_by_weight_avg(image)
-
         # 进行Sobel的垂直边缘检测
         x = cv2.Sobel(gray_image, cv2.CV_16S, 1, 0)
         scale_abs_x = cv2.convertScaleAbs(x)  # convert 转换  scale 缩放
@@ -60,6 +61,7 @@ class Locate:
 
             flag = True  # 标志表示步骤正常运行 ,标志要放在循环内，以便每次刷新
             position = candiate_list[i]
+            print(position)
             h, w = sobel_image.shape[:2]  # w = 640,h = 480
             # print(position)
             step_1 = sobel_image[position[0] - window_h:position[0] + 2 * window_h, position[1]:position[1] + window_w]
@@ -330,37 +332,44 @@ class Locate:
 
     def license_locate(self, filename):  # 这个是获取垂直跳变点图的位置
         sobel_image, diff, binary = self.preprocess_image(filename)
+        # self.showPicture(sobel_image)
+        # self.showPicture(diff)
+        # self.showPicture(binary)
         integral_array, candiate_list = self.rough_locate(sobel_image, binary, diff)
         result, position = self.detail_locate_and_confirm(candiate_list, sobel_image, integral_array)
         return result
 
+    def showPicture(self,pic):
+        im = Image.fromarray(pic)
+        im.show()
 
 if __name__ == '__main__':
     begin = datetime.datetime.now()
     instance = Locate()
 
-    for i in range(9, 58):
-        filename = 'H:/PyCharm/workspace/licensePlate/picture_for_train/'
-        filename = filename + str(i) + ".jpg"
-        print(filename)
-        # ###############行扫描法 #################
-        # image = cv2.imread(filename)
-        # gray_img = instance.get_gray_image_by_weight_avg(image)
-        # out = instance.grey_scale(gray_img)
-        # cv2.imshow("out", out)
-        # result = instance.mark_row_area(out)
-        #
-        # cv2.imshow("result", result)
-        # cv2.waitKey(0)
-        ##################################################
+#    for i in range(9, 58):
+    filename = 'picture_for_train/11.jpg'
+    #filename = filename + str(i) + ".jpg"
+    print(filename)
+    # ###############行扫描法 #################
+    # image = cv2.imread(filename)
+    # gray_img = instance.get_gray_image_by_weight_avg(image)
+    # out = instance.grey_scale(gray_img)
+    # cv2.imshow("out", out)
+    # result = instance.mark_row_area(out)
+    #
+    # cv2.imshow("result", result)
+    # cv2.waitKey(0)
+    ##################################################
 
-        result = instance.license_locate(filename)
-        # # cv2.imshow(filename[-8:], result)
-        # # cv2.waitKey(0)
-        # h, w = result.shape[:2]
-        #
-        # result = cv2.resize(result, (200, 40))
-        # cv2.imwrite('D:/Car_Identify/picture_locate/' + str(i) + ".jpg", result)
+    result = instance.license_locate(filename)
+    #instance.showPicture(result)
+    # # cv2.imshow(filename[-8:], result)
+    # # cv2.waitKey(0)
+    # h, w = result.shape[:2]
+    #
+    # result = cv2.resize(result, (200, 40))
+    # cv2.imwrite('D:/Car_Identify/picture_locate/' + str(i) + ".jpg", result)
 
     end = datetime.datetime.now()
     print(str((end - begin).seconds) + "s")
