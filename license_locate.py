@@ -220,7 +220,7 @@ class Locate:
                     candiate_list.append((x, y))
                     self.showLine(x, y, binary_image, 1,"stop")
                     # print(area_jump_level)
-                self.showLine(x,y,binary_image,0,"stop  ")
+                self.showLine(x,y,binary_image,0,"stop")
         # print(candiate_list_1)
         candiate_list.reverse()
         return candiate_list
@@ -275,9 +275,6 @@ class Locate:
         gray_jump_integral = np.zeros((h + 1, w + 1), dtype=np.uint16)
         cv2.normalize(image_integral, gray_jump_integral, 0, 65535, cv2.NORM_MINMAX, cv2.CV_16UC1)  # 归一化处理
         np.set_printoptions(threshold=1e6)
-        data = open("E:\PyCharm\data.txt", 'w+')
-        print(gray_jump_integral, file=data)
-        data.close()
         return gray_jump_integral
 
     def get_horizontal_projection(self, shadow_image):
