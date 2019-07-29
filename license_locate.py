@@ -1,17 +1,19 @@
+import copy
 import datetime
 import math
 from collections import Counter
 
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
+np.set_printoptions(threshold=np.inf)
 
 #  确定最小搜索窗口为180*30，后续进行细定位
 from PIL import Image
 
 window_h = 20
 window_w = 180
-
-
+sobel_image = []
 class Locate:
     # 预处理图片，以获取灰度跳变图
     def preprocess_image(self, file_name):
@@ -29,8 +31,19 @@ class Locate:
         sobel_image = cv2.resize(sobel_image, (640, 480))  # 调整图片尺寸，以便后期处理
         diff = cv2.absdiff(gray_image, sobel_image)  # 做灰度图像和经过sobel边缘检测后的图片的水平差分，以去除背景影响
         avg = self.get_pixel_avg(diff)
-        binary = cv2.adaptiveThreshold(diff, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 5,
-                                       math.floor(avg / 10))
+        print("avg:" ,avg)
+        # cv::adaptiveThreshold(
+        # cv::InputArray src, // 输入图像
+        # double maxValue, // 向上最大值
+        # int adaptiveMethod, // 自适应方法，平均或高斯
+        # int thresholdType // 阈值化类型
+        # int blockSize, // 块大小
+        # double C // 常量
+        # );
+        binary = cv2.adaptiveThreshold(diff, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV,
+                                       5,
+                                       30#math.floor(avg / 10)#40
+                                       )
         # cv2.imshow("binary", binary)
         # cv2.waitKey(0)
         return sobel_image, diff, binary
@@ -39,14 +52,16 @@ class Locate:
         h, w = binary_image.shape[:2]  # w = 640,h = 480
         # 获取到二值化图像后，获取灰度跳变数组
         image_jump_array = self.get_2d_gray_jump(binary_image)
-
+        #print(image_jump_array)
         # 通过灰度跳变数组获取灰度跳变的积分图，用于找到灰度跳变点最多的区域
         integral_array = self.get_gray_scale_jump_integral(h, w, image_jump_array)
-
+        #print(integral_array)
+        # img = np.array(integral_array)
+        # plt.imshow(img)
         # 通过灰度跳变积分图，进行窗口搜索，粗定位车牌位置,
         # 以上得到粗定位的车牌候选区域，之后进行细定位车牌位置
 
-        candiate_list = self.rough_search_by_window(h, w, integral_array, sobel_image)
+        candiate_list = self.rough_search_by_window(h, w, integral_array, sobel_image,binary_image)
         return integral_array, candiate_list
 
     def detail_locate_and_confirm(self, candiate_list, sobel_image, integral_array):
@@ -61,7 +76,7 @@ class Locate:
 
             flag = True  # 标志表示步骤正常运行 ,标志要放在循环内，以便每次刷新
             position = candiate_list[i]
-            print(position)
+            #print(position)
             h, w = sobel_image.shape[:2]  # w = 640,h = 480
             # print(position)
             step_1 = sobel_image[position[0] - window_h:position[0] + 2 * window_h, position[1]:position[1] + window_w]
@@ -185,7 +200,7 @@ class Locate:
         result = sobel_image[result_x1:result_x2, result_y1:result_y2]
         return result, position
 
-    def rough_search_by_window(self, h, w, integral_array, ori_image):
+    def rough_search_by_window(self, h, w, integral_array, ori_image,binary_image):
         max_gray_jump = 0
         candiate_list = []
         max_locate = (0, 0)
@@ -197,9 +212,15 @@ class Locate:
                     area_jump_level = int(integral_array[x + window_h][y + window_w]) + int(
                         integral_array[x][y]) - int(integral_array[x + window_h][y]) - int(
                         integral_array[x][y + window_w])
-                if area_jump_level > (window_h * window_w) / 8 and 100 < x < 480 - 100 and 100 < y < 640 - 100:
+                print(int(integral_array[x + window_h][y + window_w]) ,"+", int(
+                    integral_array[x][y]) ,"-", int(integral_array[x + window_h][y]) ,"-", int(
+                    integral_array[x][y + window_w]))
+                print("x：",x,"y：",y,"跳变点个数：", area_jump_level,"区域总数的1/8：",(window_h * window_w) / 8)
+                if area_jump_level > (window_h * window_w) / 8.5 and 100 < x < 480 - 100 and 100 < y < 640 - 100:
                     candiate_list.append((x, y))
+                    self.showLine(x, y, binary_image, 1,"stop")
                     # print(area_jump_level)
+                self.showLine(x,y,binary_image,0,"stop  ")
         # print(candiate_list_1)
         candiate_list.reverse()
         return candiate_list
@@ -232,7 +253,7 @@ class Locate:
         avg = sum / (h * w)
         return sum
 
-    # 获取图像灰度跳变点的积分图
+    # 获取图像灰度跳变点图
     def get_2d_gray_jump(self, image):
         jump_list_2d = np.zeros((480, 640), np.uint8)
         h, w = image.shape[:2]
@@ -254,7 +275,9 @@ class Locate:
         gray_jump_integral = np.zeros((h + 1, w + 1), dtype=np.uint16)
         cv2.normalize(image_integral, gray_jump_integral, 0, 65535, cv2.NORM_MINMAX, cv2.CV_16UC1)  # 归一化处理
         np.set_printoptions(threshold=1e6)
-        # print(gray_jump_integral)
+        data = open("E:\PyCharm\data.txt", 'w+')
+        print(gray_jump_integral, file=data)
+        data.close()
         return gray_jump_integral
 
     def get_horizontal_projection(self, shadow_image):
@@ -340,9 +363,29 @@ class Locate:
         return result
 
     def showPicture(self,pic):
-        im = Image.fromarray(pic)
-        im.show()
+        cv2.imshow("image", pic)
+        cv2.waitKey(0)
 
+    def showLine(self,Y,X,pic,flag,stopFlag):
+        # image = cv2.imread(filename)
+        # image = cv2.resize(image, (640, 480))
+        color = 255  # 置为白点
+        if(flag==0):
+            image = copy.deepcopy(pic)
+        else:
+            image = pic
+        for topLineElement in range(X,X + 180):
+            image[Y][topLineElement]=color
+            image[Y + 20][topLineElement]=color
+        for leftColumnElement in range(Y, Y + 20):
+            image[leftColumnElement][X]=color
+            image[leftColumnElement][X + 180]=color
+
+        cv2.imshow("image", image)
+        if(stopFlag=="stop"):
+            cv2.waitKey(0)
+        else:
+            cv2.waitKey(10)
 if __name__ == '__main__':
     begin = datetime.datetime.now()
     instance = Locate()
