@@ -58,6 +58,12 @@ if __name__ == '__main__':
     image = cv2.resize(image, (640, 480))
         #instance.showPicture(image)
     sobel_image, diff, binary = instance.preprocess_image(filename)
+    cv2.imshow("image", sobel_image)
+    cv2.waitKey(0)
+    cv2.imshow("image", diff)
+    cv2.waitKey(0)
+    cv2.imshow("image", binary)
+    cv2.waitKey(0)
     integral_array, candiate_list = instance.rough_locate(sobel_image, binary, diff)
     print(len(candiate_list))
     # for each in candiate_list:

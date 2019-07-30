@@ -15,7 +15,14 @@ window_h = 20
 window_w = 180
 sobel_image = []
 class Locate:
-    # 预处理图片，以获取灰度跳变图
+    def column_diff(self,pic):
+        h, w = pic.shape[:2]  # w = 640,h = 480
+        coldiff_img = np.zeros((h, w), dtype=np.uint8)
+        for row in range(0,h):
+            for column in range(0,w-1):
+                coldiff_img[row][column+1] = pic[row][column]
+        return coldiff_img
+    # 预处理图片
     def preprocess_image(self, file_name):
         # 加权平均法 + cv2 进行灰度化
         image = cv2.imread(file_name)
@@ -29,9 +36,11 @@ class Locate:
         diff = np.array((640, 480), np.uint8)
         gray_image = cv2.resize(gray_image, (640, 480))
         sobel_image = cv2.resize(sobel_image, (640, 480))  # 调整图片尺寸，以便后期处理
-        diff = cv2.absdiff(gray_image, sobel_image)  # 做灰度图像和经过sobel边缘检测后的图片的水平差分，以去除背景影响
+        diff = cv2.absdiff(self.column_diff(sobel_image), sobel_image)  # 做灰度图像和经过sobel边缘检测后的图片的水平差分，以去除背景影响==》跳变点图
         avg = self.get_pixel_avg(diff)
         print("avg:" ,avg)
+
+        #跳变点图作自适应阈值化
         # cv::adaptiveThreshold(
         # cv::InputArray src, // 输入图像
         # double maxValue, // 向上最大值
