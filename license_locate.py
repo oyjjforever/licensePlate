@@ -28,15 +28,29 @@ class Locate:
         image = cv2.imread(file_name)
         gray_image = self.get_gray_image_by_weight_avg(image)
         # 进行Sobel的垂直边缘检测
+        # 利用Sobel方法可以进行sobel边缘检测
+        # img表示源图像，即进行边缘检测的图像
+        # cv2.CV_64F表示64位浮点数即64float。
+        # 这里不使用numpy.float64，因为可能会发生溢出现象。用cv的数据则会自动
+        # 第三和第四个参数分别是对X和Y方向的导数（即dx,dy），对于图像来说就是差分，这里1表示对X求偏导（差分），0表示不对Y求导（差分）。其中，X还可以求2次导。
+        # 注意：对X求导就是检测X方向上是否有边缘。
+        # 第五个参数ksize是指核的大小。
         x = cv2.Sobel(gray_image, cv2.CV_16S, 1, 0)
+        #在经过处理后，别忘了用convertScaleAbs()函数将其转回原来的uint8形式。否则将无法显示图像，而只是一副灰色的窗口。
         scale_abs_x = cv2.convertScaleAbs(x)  # convert 转换  scale 缩放
         sobel_image = scale_abs_x
+
+        y = cv2.Sobel(gray_image, cv2.CV_16S, 0, 1)
+        scale_abs_y = cv2.convertScaleAbs(y)
+        sobel_image_y = scale_abs_y
 
         # 二值化处理和中值滤波平滑
         diff = np.array((640, 480), np.uint8)
         gray_image = cv2.resize(gray_image, (640, 480))
         sobel_image = cv2.resize(sobel_image, (640, 480))  # 调整图片尺寸，以便后期处理
+        sobel_image_y = cv2.resize(sobel_image_y, (640, 480))  # 调整图片尺寸，以便后期处理
         diff = cv2.absdiff(self.column_diff(sobel_image), sobel_image)  # 做灰度图像和经过sobel边缘检测后的图片的水平差分，以去除背景影响==》跳变点图
+        #diff = cv2.absdiff(gray_image, sobel_image)
         avg = self.get_pixel_avg(diff)
         print("avg:" ,avg)
 
@@ -55,7 +69,7 @@ class Locate:
                                        )
         # cv2.imshow("binary", binary)
         # cv2.waitKey(0)
-        return sobel_image, diff, binary
+        return sobel_image, sobel_image_y,diff, binary
 
     def rough_locate(self, sobel_image, binary_image, diff):
         h, w = binary_image.shape[:2]  # w = 640,h = 480
@@ -73,7 +87,7 @@ class Locate:
         candiate_list = self.rough_search_by_window(h, w, integral_array, sobel_image,binary_image)
         return integral_array, candiate_list
 
-    def detail_locate_and_confirm(self, candiate_list, sobel_image, integral_array):
+    def detail_locate_and_confirm(self, candiate_list, sobel_image, sobel_image_y,integral_array):
         # position : 粗定位的车牌左上角坐标
         # 第一步扩展车牌的上下区域获得最佳上下边界
         # 具体为获取扩展区域的水平投影并获取其平均值，从水平中央开始向两侧扫描，发现小于均值的则是上下边界
@@ -88,18 +102,24 @@ class Locate:
             #print(position)
             h, w = sobel_image.shape[:2]  # w = 640,h = 480
             # print(position)
-            step_1 = sobel_image[position[0] - window_h:position[0] + 2 * window_h, position[1]:position[1] + window_w]
+            step_1 = sobel_image_y[position[0] - window_h:position[0] + 2 * window_h, position[1]:position[1] + window_w]
             # cv2.imshow("step_1", step_1)
             # cv2.waitKey(0)
+            X = position[1]
+            Y = position[0] - window_h
             if position[0] - window_h < 0:
-                step_1 = sobel_image[0:position[0] + 2 * window_h, position[1]:position[1] + window_w]
+                step_1 = sobel_image_y[0:position[0] + 2 * window_h, position[1]:position[1] + window_w]
+                X = position[1]
+                Y = 0
             elif position[0] + 2 * window_h > h:
-                step_1 = sobel_image[position[0] - window_h:h, position[1]:position[1] + window_w]
+                step_1 = sobel_image_y[position[0] - window_h:h, position[1]:position[1] + window_w]
+                X = position[1]
+                Y = position[0] - window_h
             # 获取水平投影数组
             hor_list = self.get_horizontal_projection(step_1)
 
             # 通过水平投影数组获取车牌的重定位的上下边界
-            upper, lower = self.detail_position_the_upper_and_lower_boundaries(hor_list)
+            upper, lower = self.detail_position_the_upper_and_lower_boundaries(X,Y,hor_list,sobel_image_y,position)
             if upper != lower:
                 step_1 = step_1[lower:upper, 0:w]
                 # cv2.imshow("step_1", step_1)
@@ -175,15 +195,13 @@ class Locate:
                         # cv2.waitKey(0)
         # 融合候选区域中坐标相近的位置
 
-
         # print(candiate_list_2)
         # print(Counter(candiate_list_2).most_common(3))
         result_locate = Counter(candiate_list_2).most_common(5)
         max_ratio = 0  # 不能起名为关键字，会冲突
         max_index = 0
         max_width = 0
-        for i in range(len(result_locate)):  #
-
+        for i in range(len(result_locate)):
             x1 = result_locate[i][0][0]
             x2 = result_locate[i][0][1]
             y1 = result_locate[i][0][2]
@@ -201,13 +219,16 @@ class Locate:
 
             print(max_ratio)
         # print(result_locate[0][1]) 出现最多的数出现的次数 [((238, 255, 202, 362), 36)]
+
         result_x1 = result_locate[max_index][0][0]
         result_x2 = result_locate[max_index][0][1]
         result_y1 = result_locate[max_index][0][2]
         result_y2 = result_locate[max_index][0][3]
         position = (result_x1, result_x2, result_y1, result_y2)
         result = sobel_image[result_x1:result_x2, result_y1:result_y2]
+        self.showLine(position[0],position[1],sobel_image_y,1,"stop")
         return result, position
+
 
     def rough_search_by_window(self, h, w, integral_array, ori_image,binary_image):
         max_gray_jump = 0
@@ -221,15 +242,15 @@ class Locate:
                     area_jump_level = int(integral_array[x + window_h][y + window_w]) + int(
                         integral_array[x][y]) - int(integral_array[x + window_h][y]) - int(
                         integral_array[x][y + window_w])
-                print(int(integral_array[x + window_h][y + window_w]) ,"+", int(
-                    integral_array[x][y]) ,"-", int(integral_array[x + window_h][y]) ,"-", int(
-                    integral_array[x][y + window_w]))
-                print("x：",x,"y：",y,"跳变点个数：", area_jump_level,"区域总数的1/8：",(window_h * window_w) / 8)
+                #print(int(integral_array[x + window_h][y + window_w]) ,"+", int(
+                    # integral_array[x][y]) ,"-", int(integral_array[x + window_h][y]) ,"-", int(
+                    # integral_array[x][y + window_w]))
+                #print("x：",x,"y：",y,"跳变点个数：", area_jump_level,"区域总数的1/8：",(window_h * window_w) / 8)
                 if area_jump_level > (window_h * window_w) / 8.5 and 100 < x < 480 - 100 and 100 < y < 640 - 100:
                     candiate_list.append((x, y))
-                    self.showLine(x, y, binary_image, 1,"stop")
+                    #self.showLine(x, y, binary_image, 1,"stop")
                     # print(area_jump_level)
-                self.showLine(x,y,binary_image,0,"stop")
+                #self.showLine(x,y,binary_image,0,"stop")
         # print(candiate_list_1)
         candiate_list.reverse()
         return candiate_list
@@ -306,18 +327,21 @@ class Locate:
             ver_list.append(pixel_sum)
         return ver_list
 
-    def detail_position_the_upper_and_lower_boundaries(self, list):
+    def detail_position_the_upper_and_lower_boundaries(self, X,Y,list,sobel_image_y,position):
         sum = 0
         upper = 0
         lower = 0
 
         for i in range(len(list)):
             sum += list[i]
-        avg = math.floor(sum / len(list))
+        avg = 9000 # math.floor(sum / len(list))
+        #print("[detail_position_the_upper_and_lower_boundaries] avg:",avg)
         # 从中间往上遍历，遇到比均值小的，则是车牌细定位的上边界，并跳出循环
         flag = False
         for i in range(math.floor(len(list) / 2), 0, -1):
-            if list[i] < avg:
+            self.showScanLine(position[0], position[1], Y + i, X, sobel_image_y, "row", 0)
+            if list[i] > avg:
+                self.showScanLine(position[0], position[1], Y + i, X, sobel_image_y, "row",1)
                 upper = i
                 flag = True
             if flag is False:
@@ -327,7 +351,9 @@ class Locate:
         # 从中间往下遍历，遇到比均值小的，则是车牌细定位的下边界，并跳出循环
         flag = False
         for i in range(math.floor(len(list) / 2), len(list)):
-            if list[i] < avg:
+            self.showScanLine(position[0], position[1], Y + i, X, sobel_image_y, "row", 0)
+            if list[i] > avg:
+                self.showScanLine(position[0], position[1], Y + i, X, sobel_image_y, "row",1)
                 lower = i
                 flag = True
             if flag is False:
@@ -360,23 +386,48 @@ class Locate:
         return l, r
 
     def license_locate(self, filename):  # 这个是获取垂直跳变点图的位置
-        sobel_image, diff, binary = self.preprocess_image(filename)
+        sobel_image,sobel_image_y, diff, binary = self.preprocess_image(filename)
         # self.showPicture(sobel_image)
         # self.showPicture(diff)
         # self.showPicture(binary)
         integral_array, candiate_list = self.rough_locate(sobel_image, binary, diff)
-        result, position = self.detail_locate_and_confirm(candiate_list, sobel_image, integral_array)
+        result, position = self.detail_locate_and_confirm(candiate_list, sobel_image, sobel_image_y,integral_array)
         return result
 
     def showPicture(self,pic):
         cv2.imshow("image", pic)
         cv2.waitKey(0)
 
-    def showLine(self,Y,X,pic,flag,stopFlag):
+
+    def showScanLine(self,posY,posX,Y,X,pic,type,zeroIsDeepCopy):
+        color = 255  # 置为白点
+        if (zeroIsDeepCopy == 0):
+            image = copy.deepcopy(pic)
+        else:
+            image = pic
+        # for topLineElement in range(posX,posX + 180):
+        #     image[posY][topLineElement]=color
+        #     image[posY + 20][topLineElement]=color
+        # for leftColumnElement in range(posY, posY + 20):
+        #     image[leftColumnElement][posX]=color
+        #     image[leftColumnElement][posX + 180]=color
+
+        if(type == "row"):
+            for topLineElement in range(0,640):
+                image[Y][topLineElement]=color
+        else:
+            for leftColumnElement in range(0, 480):
+                image[leftColumnElement][X]=color
+
+        cv2.imshow("image", image)
+        cv2.waitKey(10)
+
+
+    def showLine(self,Y,X,pic,zeroIsDeepCopy,stopFlag):
         # image = cv2.imread(filename)
         # image = cv2.resize(image, (640, 480))
         color = 255  # 置为白点
-        if(flag==0):
+        if(zeroIsDeepCopy==0):
             image = copy.deepcopy(pic)
         else:
             image = pic

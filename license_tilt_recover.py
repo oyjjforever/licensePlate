@@ -48,60 +48,40 @@ def get_horizontal_projection( shadow_image):
     return hor_list
 
 if __name__ == '__main__':
+    i = 27
     instance = license_locate.Locate()
-    # for i in range(11, 97):
+    #for i in range(22, 97):
     begin = time.time()
-    filename = 'picture_for_train/10.jpg'
+    filename = 'picture_for_train/'+str(i)+'.jpg'
     #filename = filename + str(i) + ".jpg"
     image = cv2.imread(filename)
         #instance.showPicture(image)
     image = cv2.resize(image, (640, 480))
         #instance.showPicture(image)
-    sobel_image, diff, binary = instance.preprocess_image(filename)
-    cv2.imshow("image", sobel_image)
-    cv2.waitKey(0)
-    cv2.imshow("image", diff)
-    cv2.waitKey(0)
-    cv2.imshow("image", binary)
-    cv2.waitKey(0)
+    sobel_image,sobel_image_y, diff, binary = instance.preprocess_image(filename)
+    # cv2.imshow("image", sobel_image)
+    # cv2.waitKey(0)
+    # cv2.imshow("image", diff)
+    # cv2.waitKey(0)
+    # cv2.imshow("image", binary)
+    # cv2.waitKey(0)
     integral_array, candiate_list = instance.rough_locate(sobel_image, binary, diff)
     print(len(candiate_list))
     # for each in candiate_list:
     #     instance.showLine(each[0],each[1],binary,1,"")
-    cv2.imshow("image", binary)
-    cv2.waitKey(0)
-    result, position = instance.detail_locate_and_confirm(candiate_list, sobel_image, integral_array)
+    # cv2.imshow("image", binary)
+    # cv2.waitKey(0)
+    result, position = instance.detail_locate_and_confirm(candiate_list, sobel_image, sobel_image_y,integral_array)
     x1 = position[0]
     x2 = position[1]
     y1 = position[2]
     y2 = position[3]
     ExpendH = math.floor((x2 - x1) / 2)
     image_need = image[x1:x2, y1: y2]
-        # image_need_correct = sobel_image[position[0] + lower - window_h - ExpendH:position[0] - window_h + upper + ExpendH,
-        #                       image_left: image_right]
-        # if position[1] - math.floor(3 * w_1 / 2) < 0:
-        #     image_need_correct = image[
-        #                          position[0] - window_h + lower - ExpendH: position[0] - window_h + upper + ExpendH,
-        #                          left:right]
-        # elif position[1] + window_w + math.floor(3 * w_1 / 2) > 640:
-        #     image_need_correct = image[
-        #                          position[0] - window_h + lower - ExpendH: position[0] - window_h + upper + ExpendH,
-        #                          position[1] - math.floor(3 * w_1 / 2) + left:640]
-        # print(image_left)
-        # print(image_right)
-    #print(i)
-        # h, w = image_need_correct.shape[:2]
-        # min = 100
-        # for i in range(-10,11):
-        #     M = cv2.getRotationMatrix2D((w / 2, h / 2), i, 1)
-        #     result = cv2.warpAffine(image_need_correct, M, (w, h))
-        #     hor_list = get_horizontal_projection(result)
-        #     if len(hor_list) < min:
-        #         min = len(hor_list)
-        # print(hor_list)
+
     end = time.time()
     print("时间:"+str(end - begin)+"s")
     image_need = cv2.resize(image_need,(210,40))
-    #cv2.imwrite('picture_for_tilt/'+str(i)+'.jpg',image_need)
-        # cv2.imshow("image_need_correct", result)
-        # cv2.waitKey(0)
+    cv2.imwrite('picture_for_tilt/'+str(i)+'.jpg',image_need)
+    # cv2.imshow("image", image_need)
+    # cv2.waitKey(0)
